@@ -41,8 +41,9 @@ const IF = (cond,steps)=>({t:'if', cond, steps});
 const SFX = (k)=>({t:'sfx', k});   // 효과음 한 번
 const AMB = (k)=>({t:'amb', k});   // 배경 소리 바꾸기
 const MUS = (k)=>({t:'mus', k});   // 배경 음악 바꾸기 (tension / sad / hope / none)
+const MINI = (k)=>({t:'mini', k}); // 미니게임 (story.js의 STORY.mini[k]를 실행해요)
 
-const SCRIPT = STORY.script({ N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS });
+const SCRIPT = STORY.script({ N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI });
 const CHAPTERS = SCRIPT.filter(s=>s.t === 'save').length;
 
 
@@ -140,6 +141,7 @@ const Sound = (()=>{
     heli(){ const h = layer({kind:'brown', f:500, peak:.2, am:11}); setTimeout(()=>h.stop(2), 4500); },
     ding(){ const t = now(); [523.25,659.25,783.99].forEach((f,i)=>{ tone(f, {t:t+i*.42, r:1.1, peak:.18}); tone(f*2, {t:t+i*.42, r:.6, peak:.04}); }); },
     whoosh(){ burst({type:'bandpass', f:400, fEnd:2000, q:1, a:.3, r:.4, peak:.25}); },
+    bird(){ const t = now(); [0,.16,.32].forEach(d=>tone(3200+Math.random()*600, {t:t+d, a:.01, r:.09, peak:.025, fEnd:2400})); },
     // 게임 안내음
     correct(){ const t = now(); [783.99,987.77,1318.5].forEach((f,i)=>tone(f, {t:t+i*.09, type:'triangle', a:.005, r:.35, peak:.18})); },
     wrong(){ tone(233, {type:'square', a:.01, hold:.12, r:.25, peak:.06, fEnd:150}); },
@@ -163,7 +165,11 @@ const Sound = (()=>{
     roar: ()=>[layer({kind:'brown', f:300, peak:.45, rate:.2, depth:.15}), layer({type:'bandpass', f:900, q:.8, peak:.06, rate:3.5, depth:.03})],
     wind: ()=>[wind(.16), layer({kind:'brown', f:350, peak:.18, rate:.09, depth:.1}), every(10000,18000, FX.siren)],
     heli: ()=>[wind(.1), layer({kind:'brown', f:500, peak:.16, am:11})],
-    calm: ()=>[layer({kind:'brown', f:500, peak:.2, rate:.09, depth:.12}), layer({type:'highpass', f:4000, peak:.02, rate:.09, depth:.015}), every(8000,15000, FX.gull)]
+    calm: ()=>[layer({kind:'brown', f:500, peak:.2, rate:.09, depth:.12}), layer({type:'highpass', f:4000, peak:.02, rate:.09, depth:.015}), every(8000,15000, FX.gull)],
+    // 조용한 교실: 낮은 공기 소리 + 가끔 창밖 새소리
+    room: ()=>[layer({kind:'brown', f:300, peak:.06, rate:.05, depth:.02}), every(5000,11000, FX.bird)],
+    // 운동장: 바람 + 멀리서 웅성이는 소리
+    yard: ()=>[wind(.08), layer({type:'bandpass', f:800, q:.9, peak:.05, rate:3.1, depth:.025}), every(9000,16000, FX.bird)]
   };
 
 
@@ -635,7 +641,8 @@ function askChoice(c, opts){
    오답: res(결과 장면) → 하트 -1 → 왜 위험한지(fb) → after(인물들의 대화: 남 탓, 앞으로는 이렇게 하자) */
 async function doChoice(c){
   const id = runId;
-  let opts = c.opts.map((o,k)=>({...o, k}));
+  // when: 이 상태일 때만 나오는 선택지 (예: 1장에서 고른 자리)
+  let opts = c.opts.filter(o=>!o.when || o.when(state)).map((o,k)=>({...o, k}));
   if (!c.unscored) opts = shuffle(opts);
   while (true){
     const o = await askChoice(c, opts); check(id);
@@ -662,6 +669,18 @@ async function doChoice(c){
   }
 }
 
+/* 미니게임: 끝나면 {penalty(감점), mistakes(실수 목록)}를 돌려받아요.
+   빨리 감기(뒤로가기) 중에는 다시 하지 않고, 끝난 뒤에는 그 앞으로 되돌아갈 수 없어요. */
+async function runMini(s){
+  if (ff) return;
+  stopSkip(); $('dialog').hidden = true; document.body.classList.add('mini-on');
+  let r = null;
+  try { r = await STORY.mini[s.k]({ state, Sound, fill }); }
+  finally { document.body.classList.remove('mini-on'); }
+  if (r){ stats.mini = Math.min(SCORE.miniMax, stats.mini + (r.penalty || 0)); stats.miniMistakes += (r.mistakes || []).length; }
+  chap.decLine = chap.line; updateNav();
+}
+
 /* 대본 한 줄 실행 */
 let lastLesson = '';
 async function runStep(s){
@@ -683,6 +702,7 @@ async function runStep(s){
       chap = newChap(); chap.hint = state.hintUsed;
       if (!ff) $('dialog').hidden = true;
       return showChapter(s.ch, s.title);
+    case 'mini': return runMini(s);
     case 'end': stopSkip(); return showEnding();
   }
 }
@@ -753,8 +773,8 @@ function goSkip(){
 function restartChapter(){ $('menu').hidden = true; rewindTo(null); }
 function restartGame(){
   $('menu').hidden = true; abortRun(); ff = null;
-  Object.assign(state, { hearts: 3, loc: 'sand', lastOk: true, hintUsed: false });
-  stats.wrong = 0; stats.hints = 0; myEntry = null;
+  Object.assign(state, { hearts: 3, lastOk: true, hintUsed: false }, STORY.state || {});
+  stats.wrong = 0; stats.hints = 0; stats.mini = 0; stats.miniMistakes = 0; myEntry = null;
   drawHearts(); fx('stop'); currentBg = ''; Sound.music('none');
   play(0);
 }
@@ -767,10 +787,11 @@ function restartGame(){
 const GAME_VERSION = STORY.version;
 const RANK = STORY.rank || { url: '', key: '' };   // 주소와 공개 키는 story.js에 있어요
 // 점수 계산에 쓰는 기록 (장을 다시 해도 틀린 횟수·힌트는 지워지지 않아요)
-const stats = { wrong: 0, hints: 0 };
-const SCORE = { base: 1000, heart: 200, wrong: 100, hint: 50 };
+// mini: 미니게임 감점 (최대 miniMax점까지)
+const stats = { wrong: 0, hints: 0, mini: 0, miniMistakes: 0 };
+const SCORE = { base: 1000, heart: 200, wrong: 100, hint: 50, miniMax: 200 };
 function calcScore(){
-  return Math.max(0, SCORE.base + state.hearts*SCORE.heart - stats.wrong*SCORE.wrong - stats.hints*SCORE.hint);
+  return Math.max(0, SCORE.base + state.hearts*SCORE.heart - stats.wrong*SCORE.wrong - stats.hints*SCORE.hint - stats.mini);
 }
 const rankOn = ()=> !!(RANK.url && RANK.key);
 async function rankApi(path, opts = {}){
@@ -784,9 +805,11 @@ async function rankApi(path, opts = {}){
 let myEntry = null;      // 방금 올린 내 기록 (목록에서 강조)
 async function submitScore(nickname){
   const row = { nickname, grade: state.grade, cls: state.cls, hearts: state.hearts,
-                wrongs: stats.wrong, hints: stats.hints, score: calcScore(), version: GAME_VERSION, game: STORY.id };
+                wrongs: stats.wrong, hints: stats.hints, mini: stats.mini, score: calcScore(), version: GAME_VERSION, game: STORY.id };
   try { await rankApi('scores', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) }); }
   catch (err){
+    // 아직 표에 'mini' 칸이 없으면: 감점이 없을 때만 그 칸을 빼고 다시 올려요 (supabase/schema.sql 참고)
+    if (/mini/.test(String(err.message)) && !stats.mini){ delete row.mini; await rankApi('scores', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) }); myEntry = row; return; }
     // 아직 표에 'game' 칸이 없으면 그 칸만 빼고 다시 올려요 (supabase/schema.sql 참고)
     if (!/game/.test(String(err.message))) throw err;
     delete row.game;
@@ -838,6 +861,7 @@ function showEnding(){
   const parts = $('scoreParts'); parts.innerHTML = '';
   parts.append(part(`기본 ${SCORE.base}`), part(`남은 하트 ${state.hearts}개 +${state.hearts*SCORE.heart}`,'plus'),
                part(`틀린 횟수 ${stats.wrong}번 −${stats.wrong*SCORE.wrong}`,'minus'), part(`힌트 ${stats.hints}번 −${stats.hints*SCORE.hint}`,'minus'));
+  if (STORY.mini) parts.append(part(`3D 대피 실수 ${stats.miniMistakes}번 −${stats.mini}`,'minus'));
   $('nickMsg').textContent = rankOn() ? '별명을 쓰고 랭킹에 올려 봐요! (진짜 이름은 쓰지 않아요)' : '랭킹 서버가 아직 연결되지 않았어요.';
   $('nickBtn').disabled = false; $('nick').disabled = false;
   $('nickForm').onsubmit = async (e)=>{
@@ -879,7 +903,7 @@ function showEnding(){
   document.querySelectorAll('.ver').forEach(v=>v.textContent = STORY.version);
   for (let g=1; g<=6; g++) $('gr').add(new Option(g+'학년', g, g===STORY.defaultGrade, g===STORY.defaultGrade));
   for (let c=1; c<=10; c++) $('cl').add(new Option(c+'반', c, c===STORY.defaultClass, c===STORY.defaultClass));
-  setBg('beach');
+  setBg(STORY.startBg || STORY.backgrounds[0]);
   const sndUi = ()=>{ $('sndBtn').setAttribute('aria-pressed', Sound.on); $('sndLbl').textContent = Sound.on ? '소리 켬' : '소리 끔'; };
   sndUi();
   $('sndBtn').onclick = (e)=>{ e.stopPropagation(); Sound.init(); Sound.setOn(!Sound.on); sndUi(); };

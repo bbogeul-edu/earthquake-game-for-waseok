@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>지진해일에서 살아남기</title>
+<title>지진에서 살아남기</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
 <style>
 /* =========================================================
    1) 색과 글꼴 (디자인 토큰)
-   게임은 '바닷가 저녁 하늘' 느낌의 어두운 화면 하나로 고정했어요.
+   게임은 어두운 화면 하나로 고정했어요. (지진해일 게임과 같은 디자인)
    ========================================================= */
 :root{
   color-scheme: dark;
@@ -252,6 +252,75 @@ h1 span{color:#7fd3ff}
   #wave.go{animation-duration:.01s}
   .opt,.panel,.card{animation:none}
 }
+
+/* =========================================================
+   9) 3D 대피 미니게임 (quake3d.js)
+   ========================================================= */
+body.mini-on #hud, body.mini-on #bottom{display:none}
+#mini{position:fixed;inset:0;z-index:8;background:#bfe0f5;touch-action:none}
+#mini[hidden],#mini [hidden]{display:none!important}
+#m3d{position:absolute;inset:0}
+#m3d canvas{display:block;width:100%!important;height:100%!important}
+#mShade{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(5,10,20,.35) 100%)}
+#mTop{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);left:16px;display:flex;gap:10px;align-items:flex-start;max-width:calc(100% - 200px)}
+#mGoal{background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:8px 14px 10px;min-width:0}
+#mGoal small{display:block;color:var(--muted);font-size:.8rem}
+#mGoal b{display:block;font-family:var(--display);font-weight:400;font-size:1.15rem;color:#7ef0b8}
+#mPen{background:#e2465b;color:#fff;border-radius:999px;padding:8px 14px;font-family:var(--display);font-size:1.05rem}
+#mMap{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:16px;width:150px;height:150px;
+  background:rgba(12,24,42,.78);border:1px solid var(--line);border-radius:16px}
+#mPoint{position:absolute;left:50%;top:42%;font-size:72px;color:#14a06a;text-shadow:0 0 0 #fff,0 3px 10px rgba(0,0,0,.4);
+  transform-origin:50% 50%;pointer-events:none;-webkit-text-stroke:3px #eafff4}
+#mBag{position:absolute;left:0;right:0;top:-6vh;height:34vh;display:grid;place-items:center;font-size:24vh;pointer-events:none;
+  filter:drop-shadow(0 10px 20px rgba(0,0,0,.4))}
+#mSay{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);
+  width:min(560px,calc(100% - 300px));display:flex;gap:12px;align-items:center;background:var(--glass);
+  border:1px solid var(--line);border-radius:18px;padding:10px 14px}
+#mSay .ava{flex:0 0 52px;width:52px;height:52px}
+#mSay b{font-family:var(--display);font-weight:400}
+#mSay p{margin:2px 0 0;font-size:1.05rem;line-height:1.45}
+#mSay.pop{animation:mpop .25s ease}
+@keyframes mpop{from{transform:translateX(-50%) translateY(8px);opacity:0}to{transform:translateX(-50%);opacity:1}}
+#mJoy{position:absolute;left:calc(env(safe-area-inset-left,0px) + 22px);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
+  width:136px;height:136px;border-radius:50%;background:rgba(12,24,42,.55);border:2px solid rgba(255,255,255,.35);touch-action:none}
+#mJoy i{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#ffffff,#cfe6f7);box-shadow:0 4px 10px rgba(0,0,0,.35)}
+#mJoy span{position:absolute;left:0;right:0;bottom:-24px;text-align:center;font-size:.8rem;color:#123;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,.7)}
+#mProtect{position:absolute;right:calc(env(safe-area-inset-right,0px) + 22px);bottom:calc(env(safe-area-inset-bottom,0px) + 26px);
+  width:150px;height:150px;border-radius:50%;border:0;background:#ffcf4a;color:#3b2a00;font-family:var(--display);font-size:1.5rem;
+  box-shadow:0 8px 0 #b98d12,0 0 0 10px rgba(255,207,74,.35);animation:mpulse .6s ease-in-out infinite alternate}
+#mProtect[hidden]{display:none}
+@keyframes mpulse{to{box-shadow:0 8px 0 #b98d12,0 0 0 22px rgba(255,207,74,.15);transform:scale(1.06)}}
+#mFlash{position:absolute;inset:0;pointer-events:none;opacity:0}
+#mFlash.go{animation:mflash .7s ease}
+@keyframes mflash{0%{opacity:1}100%{opacity:0}}
+.mMinus{position:absolute;left:50%;top:38%;transform:translateX(-50%);font-family:var(--display);font-size:3rem;color:#ff5a6e;
+  text-shadow:0 3px 0 #fff;animation:mminus 1.3s ease forwards;pointer-events:none}
+@keyframes mminus{from{opacity:1;margin-top:0}to{opacity:0;margin-top:-60px}}
+.mPanel{position:absolute;inset:0;display:grid;place-items:center;padding:16px;background:rgba(5,10,20,.45)}
+.mPanel[hidden]{display:none}
+.mCard{max-width:560px;max-height:calc(100vh - 32px);overflow:auto}
+.mCard h2{font-family:var(--display);font-weight:400;font-size:1.7rem;margin:4px 0 10px}
+.mKick{margin:0;color:var(--warn);font-family:var(--display)}
+.mLead{font-size:1.1rem;line-height:1.55;margin:0 0 12px}
+.mRules{margin:0 0 12px;padding-left:18px;line-height:1.55}
+.mRules li{margin:6px 0}
+.mRules b{color:#7ef0b8;font-weight:700;margin-right:4px}
+.mBtnTag{background:#ffcf4a;color:#3b2a00;border-radius:8px;padding:1px 8px;font-family:var(--display)}
+.mNote{color:var(--muted);font-size:.9rem;margin:0 0 14px}
+.mRoute{font-family:var(--display);font-size:1.25rem;color:#7ef0b8;line-height:1.5;margin:0 0 10px}
+.mList{margin:0 0 10px;padding-left:18px;line-height:1.6}
+.mList li.good{color:#7ef0b8;list-style:none;margin-left:-18px}
+.mTotal{font-family:var(--display);font-size:1.2rem;margin:0 0 14px}
+#mAsk{align-items:end;background:rgba(5,10,20,.25)}
+.mAskIn{width:min(640px,100%);display:grid;gap:10px;margin-bottom:max(env(safe-area-inset-bottom,0px),12px)}
+@media (max-width:700px){
+  #mMap{width:104px;height:104px}
+  #mTop{max-width:calc(100% - 140px)}
+  #mSay{width:calc(100% - 32px);bottom:auto;top:calc(env(safe-area-inset-top,0px) + 128px)}
+  #mJoy{width:120px;height:120px}
+  #mProtect{width:124px;height:124px;font-size:1.25rem}
+}
 </style>
 </head>
 <body>
@@ -267,7 +336,7 @@ h1 span{color:#7fd3ff}
 
 <div id="hud" hidden>
   <div id="prog" aria-label="진행도">
-    <div class="pl"><b id="chNum">1장</b><span id="chName">바닷가에 도착했어요</span><em id="chTotal"></em></div>
+    <div class="pl"><b id="chNum">1장</b><span id="chName">나른한 5교시</span><em id="chTotal"></em></div>
     <div class="pbar"><i id="pfill"></i><span class="ticks"></span></div>
   </div>
   <div class="hud-right">
@@ -360,7 +429,7 @@ h1 span{color:#7fd3ff}
       <div class="score-big"><span id="scoreNum">0</span>점</div>
       <div class="score-parts" id="scoreParts"></div>
       <form class="nick-row" id="nickForm" autocomplete="off">
-        <input id="nick" maxlength="8" placeholder="랭킹에 쓸 별명 (예: 파도왕)">
+        <input id="nick" maxlength="8" placeholder="랭킹에 쓸 별명 (예: 안전왕)">
         <button class="big-btn" type="submit" id="nickBtn">랭킹에 올리기</button>
       </form>
       <div class="nick-msg" id="nickMsg"></div>
@@ -378,12 +447,15 @@ h1 span{color:#7fd3ff}
     <p class="fb-title" style="color:var(--warn)">🏆 랭킹 보드</p>
     <div class="rank-tabs"><button id="tabClass" class="on" type="button">우리 반</button><button id="tabAll" type="button">전체</button></div>
     <ol class="rank-list" id="rankList"></ol>
-    <p class="rank-rule">점수 = 기본 1000점 + 남은 하트 × 200점 − 틀린 횟수 × 100점 − 힌트 × 50점</p>
+    <p class="rank-rule">점수 = 기본 1000점 + 남은 하트 × 200점 − 틀린 횟수 × 100점 − 힌트 × 50점 − 3D 대피 감점(최대 200점)</p>
     <button class="big-btn" id="rankClose" type="button">닫기</button>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="school.js"></script>
 <script src="story.js"></script>
+<script src="quake3d.js"></script>
 <script src="engine.js"></script>
 
 </body>
