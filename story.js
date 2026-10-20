@@ -109,7 +109,7 @@ STORY.anim = {
   entrance:     {wind:4, sparkle:[.3,.55,.85,.75,10,'#ffffff'], fx:.55},
   field:        {wind:4},
   goalpost:     {wind:6, fx:.4},
-  ambulance:    {},
+  ambulance:    {siren:[[.153,.236,'#ff3b3b'],[.273,.246,'#3b7bff'],[.33,.258,'#ff3b3b'],[.045,.3,'#ff3b3b']], fx:.3},
   field_dusk:   {sparkle:[.04,.12,.25,.3,10,'#fff0b0'], gull:true},
   class_after:  {sparkle:[.03,.12,.4,.62,16,'#fff3c4']}
 };
