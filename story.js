@@ -5,7 +5,7 @@
    ================================================================= */
 const STORY = {
   id: 'earthquake',                     // 랭킹에서 게임을 구분하는 이름 (영어, 띄어쓰기 없이)
-  version: 'v1.0.0',
+  version: 'v1.0.1',
   title: '지진에서 살아남기',
   titleHTML: '지진에서 <span>살아남기</span>',
   kicker: '와석초등학교 지진 대피 훈련',
@@ -98,20 +98,20 @@ const SPOT = (s)=> GROUND(s) ? '복도' : '계단';
 /* ---------- 배경 움직임 (좌표는 그림 크기에 대한 비율, 0~1) ----------
    그림이 들어오면 위치를 맞춰요. 지금은 가벼운 움직임만 넣어 두었어요. */
 STORY.anim = {
-  class_seat:   {sparkle:[.05,.15,.45,.6,16,'#fff3c4'], origin:'50% 45%'},
-  class_window: {sparkle:[.1,.1,.9,.5,10,'#ffffff'], gull:true},
-  class_desk:   {origin:'50% 70%'},
-  class_mess:   {mist:[.2,.3,.8,.7,10], origin:'50% 40%'},
-  stairs:       {origin:'50% 60%'},
-  stairs_fallen:{mist:[.2,.35,.8,.8,18], origin:'50% 60%'},
+  class_seat:   {sparkle:[.03,.12,.4,.62,16,'#fff3c4'], origin:'50% 45%'},
+  class_window: {sparkle:[.03,.05,.55,.45,10,'#ffffff'], gull:true, fx:.35},
+  class_desk:   {sparkle:[.1,.25,.9,.6,10,'#fff3c4'], origin:'50% 70%'},
+  class_mess:   {sparkle:[.35,.08,.85,.55,16,'#fff6dc'], origin:'55% 35%'},
+  stairs:       {sparkle:[.25,.5,.75,.85,10,'#fff3c4'], origin:'50% 60%'},
+  stairs_fallen:{mist:[.3,.35,.95,.85,18], origin:'60% 60%', fx:.6},
   hall:         {origin:'50% 50%'},
   hall_fallen:  {mist:[.2,.35,.8,.8,18], origin:'50% 60%'},
-  entrance:     {wind:5},
-  field:        {wind:6, bob:true},
-  goalpost:     {wind:6},
+  entrance:     {wind:4, sparkle:[.3,.55,.85,.75,10,'#ffffff'], fx:.55},
+  field:        {wind:4},
+  goalpost:     {wind:6, fx:.4},
   ambulance:    {},
-  field_dusk:   {sparkle:[.2,.2,.8,.5,14,'#ffe2a0']},
-  class_after:  {sparkle:[.05,.15,.45,.6,16,'#fff3c4']}
+  field_dusk:   {sparkle:[.04,.12,.25,.3,10,'#fff0b0'], gull:true},
+  class_after:  {sparkle:[.03,.12,.4,.62,16,'#fff3c4']}
 };
 
 /* ---------- 3D 대피 미니게임 ---------- */
