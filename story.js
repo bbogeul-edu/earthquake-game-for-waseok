@@ -217,7 +217,7 @@ STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
     MUS('tension'),
 
     /* ---------- 4장 ---------- */
-    SAVE(4,'재현아!'), BG(s=>GROUND(s) ? 'hall' : 'stairs'), AMB('room'), MUS('tension'),
+    SAVE(4,'재현이의 희생'), BG(s=>GROUND(s) ? 'hall' : 'stairs'), AMB('room'), MUS('tension'),
     N(s=> GROUND(s) ? '출구가 바로 앞에 보일 때였어요.' : '계단을 거의 다 내려왔을 때였어요.'),
     FX('tremble'), N('우르르르… 발밑이 다시 흔들리기 시작했어요!'),
     S('teacher','여진이에요! 그 자리에서 낮게! 머리 보호!'),
