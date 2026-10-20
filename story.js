@@ -103,7 +103,7 @@ STORY.anim = {
   class_desk:   {sparkle:[.1,.25,.9,.6,10,'#fff3c4'], origin:'50% 70%'},
   class_mess:   {sparkle:[.35,.08,.85,.55,16,'#fff6dc'], origin:'55% 35%'},
   stairs:       {sparkle:[.25,.5,.75,.85,10,'#fff3c4'], origin:'50% 60%'},
-  stairs_fallen:{mist:[.3,.35,.95,.85,18], origin:'60% 60%', fx:.6},
+  stairs_fallen:{mist:[.4,.45,.9,.8,18], sparkle:[.45,.1,.75,.5,10,'#fff6dc'], origin:'60% 55%', fx:.55},
   hall:         {origin:'50% 50%'},
   hall_fallen:  {mist:[.2,.35,.8,.8,18], origin:'50% 60%'},
   entrance:     {wind:4, sparkle:[.3,.55,.85,.75,10,'#ffffff'], fx:.55},
