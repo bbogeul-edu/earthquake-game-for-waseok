@@ -104,11 +104,12 @@ const Quake3D = (()=>{
     constructor(ctx, resolve){
       this.ctx = ctx; this.resolve = resolve;
       const st = ctx.state;
-      this.plan = SCHOOL.planFor(st.grade, st.cls);
+      this.base = SCHOOL.planFor(st.grade, st.cls);     // 우리 반 대피 계획 (출발 층)
+      this.floor = this.base.floor; this.plan = this.base;
       this.mistakes = []; this.penalty = 0;
       this.flags = {};
       this.input = { f:0, t:0 }; this.keys = {};
-      this.mode = 'intro';          // intro → walk → (shake) → ask → down → end
+      this.mode = 'intro';          // intro → walk → (shake) → ask → walk(계단을 걸어서 한 층씩) → end
       this.auto = !!Quake3D.debug.auto;
       this.t = 0; this.lastProgress = 0; this.lastProgressT = 0;
       $('mini').hidden = false;          // 먼저 보이게 해야 화면 크기를 잴 수 있어요
@@ -126,16 +127,28 @@ const Quake3D = (()=>{
       this.renderer = new THREE.WebGLRenderer({ antialias: true });
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
       host.innerHTML = ''; host.appendChild(this.renderer.domElement);
-      this.scene = new THREE.Scene();
-      this.scene.background = new THREE.Color('#bfe0f5');           // 창밖 하늘
       this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 700);
-      this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb9ad98, 0.95));
-      const sun = new THREE.DirectionalLight(0xfff3dc, 0.35); sun.position.set(-40, 80, 30); this.scene.add(sun);
       this.onResize = ()=>{ const w = host.clientWidth, h = host.clientHeight; this.renderer.setSize(w, h); this.camera.aspect = w/h; this.camera.updateProjectionMatrix(); };
       addEventListener('resize', this.onResize); this.onResize();
     }
 
+    // 층이 바뀔 때마다 장면을 새로 만들어요 (지난 층은 메모리에서 지워요)
+    makeScene(){
+      if (this.scene) this.scene.traverse(o=>{ if (o.geometry) o.geometry.dispose(); if (o.material){ const m = o.material; if (m.map) m.map.dispose(); m.dispose(); } });
+      this.scene = new THREE.Scene();
+      this.scene.background = new THREE.Color('#bfe0f5');           // 창밖 하늘
+      this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb9ad98, 0.95));
+      const sun = new THREE.DirectionalLight(0xfff3dc, 0.35); sun.position.set(-40, 80, 30); this.scene.add(sun);
+    }
+    // 아래층 계획: 교실 없이, 같은 이름의 계단으로 내려와서 다시 그 계단으로 내려가요
+    floorPlan(f){
+      const B = this.base, cells = SCHOOL.cells.filter(c=>c.f === f);
+      return { ...B, floor: f, ground: false, floorCells: cells, room: [], lifts: cells.filter(c=>c.kind === 'lift'),
+               goal: cells.find(c=>c.kind === 'stair' && c.l === B.stair.id), arrived: true };
+    }
+
     buildLevel(){
+      this.makeScene();
       const P = this.plan, own = new Set(P.room);
       this.own = own;
       // 걸을 수 있는 칸: 복도, 계단, 승강기, 우리 교실
@@ -153,7 +166,7 @@ const Quake3D = (()=>{
         const m = SCHOOL.shared(A, B); if (!m) continue;
         const lo = m.axis === 'z' ? m.x - m.len/2 : m.z - m.len/2, hi = lo + m.len;
         const centers = m.len < 20 ? [(lo + hi)/2] : [lo + m.len*.2, hi - m.len*.2];
-        for (const c of centers) this.doors.push({ axis: m.axis, line: m.axis === 'z' ? m.z : m.x, c, half: 3,
+        for (const c of centers) this.doors.push({ axis: m.axis, line: m.axis === 'z' ? m.z : m.x, c, half: 3.6,
           x: m.axis === 'z' ? c : m.x, z: m.axis === 'z' ? m.z : c, room: A });
       }
       const inDoor = (x, z)=>this.doors.some(d=>d.axis === 'z' ? Math.abs(z - d.line) < 1.2 && Math.abs(x - d.c) < d.half
@@ -258,27 +271,44 @@ const Quake3D = (()=>{
       for (const L of P.lifts) this.buildLift(L);
 
       // 대피길: 교실 가운데 → 문 → 복도 → 우리 반 계단 (벽과 창문을 피해서 찾아요)
-      const g = P.goal, target = P.ground ? SCHOOL.mid(g)
-        : { x: g.stairStart.x + g.stairDir.x*(g.landing + 2.5), z: g.stairStart.z + g.stairDir.z*(g.landing + 2.5) };
-      this.path = this.findPath(SCHOOL.mid(P.room[0]), target);
-      this.door = this.doors.reduce((a, b)=>{ const da = Math.min(...this.path.map(p=>SCHOOL.dist(p, a))), db = Math.min(...this.path.map(p=>SCHOOL.dist(p, b))); return da <= db ? a : b; }, this.doors[0]) || this.path[1];
+      //  - 1층 교실: 출구 칸까지
+      //  - 그 밖: 계단 맨 아래까지 (계단을 직접 걸어 내려가요)
+      const g = P.goal, at = (k)=>({ x: g.stairStart.x + g.stairDir.x*k, z: g.stairStart.z + g.stairDir.z*k });
+      g.bottom = g.landing + g.steps*g.depth;
+      const target = P.ground ? SCHOOL.mid(g) : at(g.bottom - 3.2);
+      const from = P.room.length ? SCHOOL.mid(P.room[0]) : at(1.4);   // 아래층은 계단참에서 시작
+      this.hazards = [];
+      this.path = this.findPath(from, target);
+      this.setPathLen();
+      if (P.room.length){
+        this.door = this.nearestDoor(); this.doorAt = this.project(this.door.x, this.door.z).s;
+        this.placeHazards();                                   // 떨어진 물건을 놓고
+        this.path = this.findPath(from, target); this.setPathLen();   // 그것을 피해 가는 길로 다시 찾아요
+      } else this.quakeAt = Infinity;
+      this.door = this.doors.length
+        ? this.doors.reduce((a, b)=>{ const da = Math.min(...this.path.map(p=>SCHOOL.dist(p, a))), db = Math.min(...this.path.map(p=>SCHOOL.dist(p, b))); return da <= db ? a : b; })
+        : this.path[0];
 
-      // 우리 교실 이름표 (문 위)
-      const rc = P.room[0];
-      const board = sprite(`${P.grade}-${P.cls} 우리 반`, 2, { bg:'#fff4c9', fg:'#1b2433', size:56 });
-      board.position.set(this.door.x, 11.5, this.door.z);
-      this.scene.add(board);
-      this.decorClassroom(rc);
+      if (P.room.length){
+        // 우리 교실 이름표 (문 위)
+        const board = sprite(`${P.grade}-${P.cls} 우리 반`, 2, { bg:'#fff4c9', fg:'#1b2433', size:56 });
+        board.position.set(this.door.x, 11.5, this.door.z);
+        this.scene.add(board);
+        this.decorClassroom(P.room[0]);
+      } else {
+        // 계단참 벽에 지금 몇 층인지 크게
+        const fs = sprite(`${P.floor+1}층`, 3, { bg:'#14a06a', fg:'#ffffff', size:64 });
+        const q = at(-.5); fs.position.set(q.x, 10.5, q.z); this.scene.add(fs);
+      }
 
       // 바닥 화살표: 대피길을 따라 6칸마다
       const aMat = new THREE.MeshBasicMaterial({ map: arrowTex(), transparent: true, depthWrite: false });
       const path = this.path;
-      this.pathLen = [0];
-      for (let i=1;i<path.length;i++) this.pathLen.push(this.pathLen[i-1] + SCHOOL.dist(path[i-1], path[i]));
-      this.totalLen = this.pathLen[this.pathLen.length-1];
       this.doorAt = this.project(this.door.x, this.door.z).s;
       for (let s = 4; s < this.totalLen - 3; s += 6.5){
         const p = this.pointAt(s), q = this.pointAt(Math.min(this.totalLen, s + .5));
+        // 계단 위(계단참 너머)에는 화살표를 붙이지 않아요
+        if (!P.ground && this.walkAt(p.x, p.z, .1) === g && (p.x - g.stairStart.x)*g.stairDir.x + (p.z - g.stairStart.z)*g.stairDir.z > g.landing - .5) continue;
         // 바닥에 눕힌 뒤(X) 가는 방향으로 돌려요(Y)
         const m = add(new THREE.PlaneGeometry(2.6, 2.6), aMat, p.x, .04, p.z);
         m.rotation.order = 'YXZ'; m.rotation.set(-Math.PI/2, Math.atan2(-(q.x - p.x), -(q.z - p.z)), 0);
@@ -291,20 +321,29 @@ const Quake3D = (()=>{
       const gs = exitSign(P.ground ? P.stair.exit : `${P.stair.name}`); gs.scale.set(8.4, 2.8, 1);
       const gv = P.ground ? SCHOOL.mid(P.goal) : P.goal.stairStart; gs.position.set(gv.x, 11.8, gv.z); this.scene.add(gs);
 
-      this.placeHazards();
-      // 출발: 교실 가운데에서 문 쪽을 보며
-      this.pos = { x: path[0].x, z: path[0].z };
-      const d0 = path[1]; this.yaw = Math.atan2(-(d0.x - this.pos.x), -(d0.z - this.pos.z));
-      this.eye = EYE;
+      // 출발: 교실 가운데(또는 계단참)에서 가는 쪽을 보며
+      this.pos = { x: path[0].x, z: path[0].z }; this.lastSafe = { ...this.pos };
+      const d0 = path[1] || target; this.yaw = Math.atan2(-(d0.x - this.pos.x), -(d0.z - this.pos.z));
+      this.eye = EYE; this.eyeDrop = 0;
+      this.lastProgress = 0; this.lastProgressT = this.t;
       this.mapBox = this.makeMapBox();
     }
 
+    setPathLen(){
+      this.pathLen = [0];
+      for (let i=1;i<this.path.length;i++) this.pathLen.push(this.pathLen[i-1] + SCHOOL.dist(this.path[i-1], this.path[i]));
+      this.totalLen = this.pathLen[this.pathLen.length-1];
+    }
+    nearestDoor(){
+      return this.doors.reduce((a, b)=>{ const da = Math.min(...this.path.map(p=>SCHOOL.dist(p, a))), db = Math.min(...this.path.map(p=>SCHOOL.dist(p, b))); return da <= db ? a : b; });
+    }
     /* 길 찾기: 1칸 격자에서 A* → 곧게 펴기. 벽에서 조금 떨어지고 창문은 피해서 가요 */
     findPath(from, to){
       const ok = (x, z, r=R)=>this.clearAt(x, z, r);
       const winD = (x, z)=>{ let m = Infinity; for (const w of this.windows){ const ax = w.x1, az = w.z1, bx = w.x2, bz = w.z2, L2 = (bx-ax)**2 + (bz-az)**2 || 1;
         const k = clamp(((x-ax)*(bx-ax) + (z-az)*(bz-az))/L2, 0, 1); m = Math.min(m, Math.hypot(x - (ax + (bx-ax)*k), z - (az + (bz-az)*k))); } return m; };
-      const blocked = (x, z)=>{ const c = this.walkAt(x, z, .3); return !c || c.kind === 'lift' || (c.kind === 'stair' && c !== this.goal); };
+      const hz = this.hazards || [];
+      const blocked = (x, z)=>{ const c = this.walkAt(x, z, .3); return !c || c.kind === 'lift' || (c.kind === 'stair' && c !== this.goal) || hz.some(h=>Math.hypot(x - h.x, z - h.z) < h.rad + R*.4 + 1.2); };
       const key = (i, j)=>i + ',' + j, sx = Math.round(from.x), sz = Math.round(from.z), tx = Math.round(to.x), tz = Math.round(to.z);
       const cost = new Map(), memo = new Map();
       const stepCost = (i, j)=>{ const k = key(i, j); if (memo.has(k)) return memo.get(k);
@@ -355,14 +394,22 @@ const Quake3D = (()=>{
     }
 
     buildStair(c, isGoal){
-      // 들어오는 방향: 계단 칸과 맞닿은 복도 쪽
-      const nb = this.walk.find(w=>w !== c && w.kind !== 'stair' && SCHOOL.shared(c, w));
-      const sh = nb ? SCHOOL.shared(c, nb) : { axis:'z', x:c.x + c.w/2, z:c.z };
-      let dir;   // 계단을 내려가는 방향 (단위 벡터)
-      if (sh.axis === 'z') dir = { x:0, z: sh.z <= c.z + .5 ? 1 : -1 }; else dir = { x: sh.x <= c.x + .5 ? 1 : -1, z:0 };
-      const along = dir.x ? c.w : c.d, across = dir.x ? c.d : c.w;
-      const start = { x: dir.x ? (dir.x > 0 ? c.x : c.x + c.w) : c.x + c.w/2, z: dir.z ? (dir.z > 0 ? c.z : c.z + c.d) : c.z + c.d/2 };
-      const landing = Math.min(5, along*.3), steps = 9, depth = (along - landing)/steps, rise = 1.4;
+      // 계단은 칸의 긴 쪽으로 내려가요. 시작(계단참)은 복도와 더 많이 맞닿은 쪽 끝
+      const longX = c.w >= c.d, along = longX ? c.w : c.d, across = longX ? c.d : c.w;
+      const landing = Math.min(6, along*.25);
+      const openNear = (sgn)=>{    // 그 끝 계단참 둘레에서 걸을 수 있는 바깥 점 수
+        let n = 0; const s0 = sgn > 0 ? 0 : along - landing;
+        for (let a = s0 + .5; a < s0 + landing; a += 1) for (const side of [-1, 1]){
+          const px = longX ? c.x + a : c.x + c.w/2 + side*(across/2 + 1), pz = longX ? c.z + c.d/2 + side*(across/2 + 1) : c.z + a;
+          const w = this.walkAt(px, pz, .05); if (w && w !== c && w.kind !== 'stair') n++; }
+        for (let b = -across/2 + .5; b < across/2; b += 1){
+          const px = longX ? (sgn > 0 ? c.x - 1 : c.x + c.w + 1) : c.x + c.w/2 + b, pz = longX ? c.z + c.d/2 + b : (sgn > 0 ? c.z - 1 : c.z + c.d + 1);
+          const w = this.walkAt(px, pz, .05); if (w && w !== c && w.kind !== 'stair') n++; }
+        return n; };
+      const sg = openNear(1) >= openNear(-1) ? 1 : -1;
+      const dir = longX ? { x: sg, z: 0 } : { x: 0, z: sg };   // 계단을 내려가는 방향 (단위 벡터)
+      const start = { x: longX ? (sg > 0 ? c.x : c.x + c.w) : c.x + c.w/2, z: longX ? c.z + c.d/2 : (sg > 0 ? c.z : c.z + c.d) };
+      const steps = 9, depth = (along - landing)/steps, rise = 1.4;
       const mat = isGoal ? this.mats.stair : new THREE.MeshLambertMaterial({ color:'#d9c3ad' });
       const box = (a0, a1, y)=>{ const a = (a0+a1)/2, L = a1 - a0;
         this.add(new THREE.BoxGeometry(dir.x ? L : across, .8, dir.x ? across : L), mat, start.x + dir.x*a, y - .4, start.z + dir.z*a); };
@@ -384,6 +431,14 @@ const Quake3D = (()=>{
         s.position.set(start.x + dir.x*2, 11, start.z + dir.z*2); this.scene.add(s);
       }
       c.stairDir = dir; c.stairStart = start; c.landing = landing; c.depth = depth; c.rise = rise; c.steps = steps;
+      // 계단참 말고는 옆이나 끝에서 계단으로 떨어지지 않게 난간을 세워요 (부딪히는 벽으로도 써요)
+      const P = (a, b)=>({ x: start.x + dir.x*a + side.x*b, z: start.z + dir.z*a + side.z*b });
+      const fence = (p1, p2)=>{ this.segs.push({ type:'rail', x1:p1.x, z1:p1.z, x2:p2.x, z2:p2.z, cell:c, nx:0, nz:0 });
+        const L = Math.hypot(p2.x - p1.x, p2.z - p1.z), cx = (p1.x + p2.x)/2, cz = (p1.z + p2.z)/2, alongX = Math.abs(p2.x - p1.x) > Math.abs(p2.z - p1.z);
+        this.add(new THREE.BoxGeometry(alongX ? L : .25, .3, alongX ? .25 : L), this.mats.rail, cx, 3.6, cz);
+        for (let t = 0; t <= L; t += 2.5) this.add(new THREE.BoxGeometry(.18, 3.6, .18), this.mats.rail, p1.x + (p2.x - p1.x)*t/L, 1.8, p1.z + (p2.z - p1.z)*t/L); };
+      const half = across/2 - .05;
+      fence(P(landing, -half), P(along, -half)); fence(P(landing, half), P(along, half)); fence(P(along, -half), P(along, half));
     }
 
     buildLift(L){
@@ -425,8 +480,9 @@ const Quake3D = (()=>{
         const s = L0 + span*k, p = this.pointAt(s), q = this.pointAt(s + 1);
         const dx = q.x - p.x, dz = q.z - p.z, dl = Math.hypot(dx, dz) || 1, nx = -dz/dl, nz = dx/dl;
         const reach = (sg)=>{ let r = 0; while (r < 12 && this.walkAt(p.x + nx*sg*(r+.5), p.z + nz*sg*(r+.5), 0)) r += .5; return r; };
-        const a = reach(1), b = reach(-1), sg = a >= b ? 1 : -1, room = Math.max(a, b);
-        const rad = clamp(room - (2*R + 1.2), 1.4, 3);
+        // 복도 너비에 맞춰 크기를 정해요: 옆으로 비켜 갈 틈(몸 + 1칸 여유)이 늘 남도록
+        const a = reach(1), b = reach(-1), sg = a >= b ? 1 : -1, room = Math.max(a, b), W = a + b;
+        const rad = clamp((W - 4.8)/2, .9, 3);
         const off = sg*Math.max(0, room - rad - .3);
         const cx = p.x + nx*off, cz = p.z + nz*off;
         if (type === 'panel'){
@@ -488,7 +544,8 @@ const Quake3D = (()=>{
         if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d','W','A','S','D'].includes(k)){ this.keys[k.toLowerCase()] = on; e.preventDefault(); }
         if (on && (k === ' ' || k === 'Enter') && !$('mProtect').hidden){ e.preventDefault(); this.protect(); } };
       addEventListener('keydown', this.onKey); addEventListener('keyup', this.onKey);
-      $('mProtect').onclick = ()=>this.protect();
+      // 손가락을 대는 순간 바로 (조이스틱을 누르고 있어도 다른 손가락으로 누를 수 있어요)
+      $('mProtect').onpointerdown = (e)=>{ e.preventDefault(); e.stopPropagation(); this.protect(); };
     }
     readInput(){
       const K = this.keys;
@@ -499,7 +556,7 @@ const Quake3D = (()=>{
       return { f: Math.abs(f) < .15 ? 0 : f, t: Math.abs(t) < .15 ? 0 : t };
     }
     autoSteer(){   // 시험용 자동 걷기: 대피길을 따라가요
-      const s = this.project(this.pos.x, this.pos.z).s, p = this.pointAt(s + 4);
+      const s = this.project(this.pos.x, this.pos.z).s, p = this.pointAt(s + 2.5);
       const want = Math.atan2(-(p.x - this.pos.x), -(p.z - this.pos.z));
       let d = want - this.yaw; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
       return { f: Math.abs(d) < .6 ? 1 : .2, t: clamp(-d*2, -1, 1) };
@@ -530,7 +587,8 @@ const Quake3D = (()=>{
     updateTop(){
       const P = this.plan;
       $('mGoal').innerHTML = `<small>${P.grade}학년 ${P.cls}반 대피길</small><b></b>`;
-      $('mGoal').querySelector('b').textContent = P.ground ? `${P.stair.exit}로 가요` : `${P.stair.name}으로 가요 · ${P.floor+1}층`;
+      $('mGoal').querySelector('b').textContent = P.ground ? `${P.stair.exit}로 가요`
+        : P.arrived ? `${P.floor+1}층 · ${P.stair.name}으로 계속 내려가요` : `${P.stair.name}으로 가요 · ${P.floor+1}층`;
       $('mPen').hidden = !this.penalty; $('mPen').textContent = `감점 −${this.penalty}`;
     }
     say(who, text, ms=3800){
@@ -563,7 +621,8 @@ const Quake3D = (()=>{
           <li><b>움직이기</b> 왼쪽 아래 동그라미를 밀어요. 위로 밀면 앞으로, 옆으로 밀면 돌아요. (키보드: 방향키)</li>
           <li><b>길 찾기</b> 바닥의 초록 화살표와 오른쪽 위 작은 지도를 봐요.</li>
           <li><b>조심!</b> 창문 가까이 가지 않기 · 떨어진 물건 피하기 · 승강기 타지 않기</li>
-          <li><b>흔들리면</b> 바로 <span class="mBtnTag">머리 보호!</span> 버튼을 눌러요.</li>
+          <li><b>계단</b> 계단도 직접 걸어서 한 층씩 내려가요.</li>
+          <li><b>흔들리면</b> 3초 안에 <span class="mBtnTag">머리 보호!</span> 버튼을 눌러요. (키보드: 스페이스)</li>
         </ul>
         <p class="mNote">실수하면 하트 대신 점수가 50점씩 깎여요.</p>
         <button class="big-btn" id="mGo">출발!</button></div>`;
@@ -582,7 +641,7 @@ const Quake3D = (()=>{
       const P = this.plan, x = this.pos.x, z = this.pos.z;
       const here = this.walkAt(x, z, .3);
       // 창문 가까이
-      if (moved && this.mode === 'walk'){
+      if (moved && this.mode === 'walk' && here && here.kind === 'walk'){
         for (const w of this.windows){
           const ax = w.x1, az = w.z1, bx = w.x2, bz = w.z2, L2 = (bx-ax)**2 + (bz-az)**2 || 1;
           const k = clamp(((x-ax)*(bx-ax) + (z-az)*(bz-az))/L2, 0, 1);
@@ -633,7 +692,11 @@ const Quake3D = (()=>{
         const sd = here.stairDir, st = here.stairStart, into = (x - st.x)*sd.x + (z - st.z)*sd.z;
         // 길이 짧아서 아직 여진이 안 왔으면 계단 앞에서 먼저 와요
         if (!this.flags.quake) this.startQuake();
-        else if (into > 1.5 || P.ground) P.ground ? this.finish() : this.askStair();
+        else if (P.ground) this.finish();
+        else if (!this.flags.asked){ if (into > 1.5) this.askStair(); }
+        // 2층 → 1층 계단을 거의 다 내려오면 끝 (4장은 여기서 이어져요)
+        else if (P.floor === 1 && into > here.landing + here.steps*here.depth*.7) this.finish();
+        else if (into > here.bottom - 4) this.nextFloor();
       }
     }
     pushBack(){
@@ -643,11 +706,12 @@ const Quake3D = (()=>{
       this.frozenUntil = this.t + .8;
     }
 
-    // 여진: 머리 보호 버튼을 3.5초 안에, 움직이지 말고
+    // 여진: 3초 안에 머리 보호 버튼을 누르면 감점 없음. 흔들리는 동안은 걸을 수 없어요
     startQuake(){
-      this.flags.quake = true; this.mode = 'shake'; this.shakeT = 0; this.protected = false; this.fell = false;
+      this.flags.quake = true; this.mode = 'shake'; this.shakeT = 0; this.shakeStart = performance.now(); this.protected = false; this.fell = false;
+      this.input.f = this.input.t = 0;
       try{ Sound.quake(true); }catch(e){}
-      $('mProtect').hidden = false;
+      $('mProtect').hidden = false; $('mProtect').textContent = '머리 보호! 3';
       this.say('teacher', '또 흔들려요! 그 자리에서 머리 보호!', 3500);
       if (this.auto) setTimeout(()=>this.protect(), 600);
     }
@@ -662,8 +726,12 @@ const Quake3D = (()=>{
       this.say('jhy:serious', '흔들릴 땐 멈춰서 머리부터 지켜야 해!', 3000); $('mBag').hidden = false;
     }
     shake(dt, inp){
-      this.shakeT += dt;
-      if (!this.protected && !this.fell && (inp.f || this.shakeT > 3.5)) this.fall();
+      this.shakeT = (performance.now() - this.shakeStart)/1000;   // 실제 시계로 3초 (느린 태블릿에서도 똑같이)
+      if (!this.protected && !this.fell){
+        const left = Math.ceil(3 - this.shakeT);
+        $('mProtect').textContent = `머리 보호! ${Math.max(1, left)}`;
+        if (this.shakeT > 3) this.fall();
+      }
       this.eye += ((this.protected || this.fell ? CROUCH : EYE) - this.eye)*Math.min(1, dt*6);
       if (this.shakeT > 6){
         this.mode = 'walk'; try{ Sound.quake(false); }catch(e){}
@@ -688,18 +756,23 @@ const Quake3D = (()=>{
     descend(ok){
       if (ok){ this.sfx('correct'); this.say('jhy', '좋아, 한 줄로! 난간 꼭 잡고!', 2600); }
       else { this.sfx('slip'); this.mistake('계단을 뛰어 내려갔어요'); this.say('jhy:serious', '계단에서 뛰면 굴러떨어져! 난간 잡고 천천히!', 2800); }
-      this.mode = 'down'; this.downT = 0; this.downFrom = { ...this.pos };
+      this.flags.asked = true; this.mode = 'walk'; this.lastProgressT = this.t;
       const g = this.goal; this.yaw = Math.atan2(-g.stairDir.x, -g.stairDir.z);
       this.sfx('steps');
     }
-    down(dt){
-      const g = this.goal, T = 3.2; this.downT += dt;
-      const k = Math.min(1, this.downT/T), along = g.landing + k*(g.depth*g.steps - 1);
-      this.pos.x = g.stairStart.x + g.stairDir.x*along; this.pos.z = g.stairStart.z + g.stairDir.z*along;
-      this.eyeDrop = -Math.max(0, along - g.landing)/g.depth*g.rise;
-      const floors = this.plan.floor, now = Math.max(1, floors + 1 - Math.floor(k*floors + .001));
-      $('mGoal').querySelector('b').textContent = `${now}층 · ${this.plan.stair.name}을 내려가요`;
-      if (this.downT > T){ this.finish(); }
+    // 계단 맨 아래에 닿으면 아래층으로
+    nextFloor(){
+      const f = this.floor - 1;
+      this.floor = f; this.plan = this.floorPlan(f);
+      this.flash('rgba(255,255,255,.85)'); this.sfx('steps');
+      this.buildLevel(); this.updateTop();
+      this.say('sw', f === 1 ? '2층이야! 이제 이 계단만 내려가면 1층이야!' : `${f+1}층이야! 난간 잡고 계속 내려가자.`, 2600);
+    }
+    // 계단 위에 있으면 눈높이를 계단 높이만큼 낮춰요
+    stairHeight(){
+      const g = this.goal; if (!g || !g.stairDir || this.walkAt(this.pos.x, this.pos.z, .3) !== g) return 0;
+      const along = (this.pos.x - g.stairStart.x)*g.stairDir.x + (this.pos.z - g.stairStart.z)*g.stairDir.z;
+      return -clamp((along - g.landing)/g.depth, 0, g.steps)*g.rise;
     }
 
     /* ---------- ⑥ 끝내기 ---------- */
@@ -748,13 +821,13 @@ const Quake3D = (()=>{
         moved = this.move(dt, inp);
         this.eye += (EYE - this.eye)*Math.min(1, dt*6);
       } else if (this.mode === 'shake') this.shake(dt, inp);
-      else if (this.mode === 'down') this.down(dt);
       if (this.mode === 'walk' || this.mode === 'shake') this.events(dt, moved);
       if (!this.lastSafe) this.lastSafe = { ...this.pos };
       // 카메라 (걸을 때 살짝 흔들, 여진 때 크게 흔들)
       this.bob = (this.bob || 0) + moved*0.9;
       const amp = this.mode === 'shake' ? .55 : 0;
-      const y = this.eye + (this.eyeDrop || 0) + Math.sin(this.bob)*.12 + rnd(-amp, amp);
+      this.eyeDrop += (this.stairHeight() - this.eyeDrop)*Math.min(1, dt*10);
+      const y = this.eye + this.eyeDrop + Math.sin(this.bob)*.12 + rnd(-amp, amp);
       this.camera.position.set(this.pos.x + rnd(-amp, amp)*.6, y, this.pos.z + rnd(-amp, amp)*.6);
       this.camera.rotation.set(rnd(-amp, amp)*.03, this.yaw, rnd(-amp, amp)*.04, 'YXZ');
       this.renderer.render(this.scene, this.camera);
