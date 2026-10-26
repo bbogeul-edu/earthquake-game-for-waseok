@@ -175,8 +175,12 @@ const Sound = (()=>{
 
   /* ---------- 배경 음악 (코드로 연주해요) ----------
      tension: 위험한 장면 (D단조, 심장 박동 + 낮은 반복음 + 떨리는 현악)
-     sad:     재현이가 사라진 장면 (D단조 피아노 엘레지)
-     hope:    재회와 엔딩 (F장조 피아노) */
+     sad:     친구가 다친 장면 (D단조 피아노 엘레지)
+     hope:    재회와 엔딩 (F장조 피아노)
+     lazy:    나른한 오후 교실 (G장조 3박자 왈츠, 오르골 같은 높은 음)
+     alarm:   대피·큰 여진 (E단조 132bpm, 16분음표 반복음 + 북)
+     relief:  운동장에 모여 한숨 돌리는 장면 (C장조 자장가풍 피아노)
+     brave:   구급대가 온 장면 (D장조 행진곡, 쿵-짝 반주) */
   let musicBus = null, reverb = null, track = null, musicName = 'none', schedId = null;
   const mf = (m)=>440*Math.pow(2,(m-69)/12);
   const NOTE = (s)=>{ const m = s.match(/^([A-G])(#|b)?(\d)$/); const base = {C:0,D:2,E:4,F:5,G:7,A:9,B:11}[m[1]] + (m[2]==='#'?1:m[2]==='b'?-1:0); return mf(12*(+m[3]+1)+base); };
@@ -233,6 +237,38 @@ const Sound = (()=>{
       {lh:arp(36,40,43), ch:[48,52,55], mel:[['E5',2],['D5',1],['C5',1]]},
       {lh:arp(34,38,41), ch:[46,50,53], mel:[['D5',1.5],['C5',.5],['Bb4',1],['A4',1]]},
       {lh:arp(36,40,43), ch:[48,52,55], mel:[['G4',3],[null,1]]}
+    ]},
+    // 3박자: bass(1박) + ch(2·3박) + 멜로디 + 오르골(box, 한 옥타브 위 장식음)
+    lazy: { beat: 60/84, meter: 3, bars: [
+      {bass:43, ch:[59,62,67], mel:[['B4',1],['D5',1],['G5',1]], box:'D6'},
+      {bass:40, ch:[59,64,67], mel:[['E5',2],['D5',1]]},
+      {bass:36, ch:[60,64,67], mel:[['G4',1],['C5',1],['E5',1]], box:'G6'},
+      {bass:38, ch:[57,62,66], mel:[['D5',3]]},
+      {bass:43, ch:[59,62,67], mel:[['B4',1],['D5',1],['G5',1]], box:'B6'},
+      {bass:40, ch:[59,64,67], mel:[['A5',1.5],['G5',.5],['E5',1]]},
+      {bass:36, ch:[60,64,67], mel:[['E5',1],['D5',1],['C5',1]], box:'E6'},
+      {bass:43, ch:[59,62,67], mel:[['B4',2],[null,1]]}
+    ]},
+    relief: { beat: 60/66, bars: [
+      {lh:arp(48,52,55), ch:[60,64,67], mel:[['E5',2],['D5',1],['C5',1]]},
+      {lh:arp(47,50,55), ch:[59,62,67], mel:[['D5',2],['B4',1],['G4',1]]},
+      {lh:arp(45,48,52), ch:[57,60,64], mel:[['C5',2],['E5',1],['A5',1]]},
+      {lh:arp(41,45,48), ch:[53,57,60], mel:[['G5',3],['F5',1]]},
+      {lh:arp(48,52,55), ch:[60,64,67], mel:[['E5',1.5],['F5',.5],['G5',1],['E5',1]]},
+      {lh:arp(43,47,50), ch:[55,59,62], mel:[['D5',2],['C5',1],['B4',1]]},
+      {lh:arp(41,45,48), ch:[53,57,60], mel:[['A4',1],['C5',1],['F5',1],['E5',1]]},
+      {lh:arp(48,52,55), ch:[60,64,67], mel:[['C5',3],[null,1]]}
+    ]},
+    // 행진곡: 1·3박 베이스, 2·4박 화음 (쿵-짝)
+    brave: { beat: 60/100, march: true, bars: [
+      {bass:38, ch:[62,66,69], mel:[['A4',1],['D5',1],['F#5',1.5],['E5',.5]]},
+      {bass:43, ch:[59,62,67], mel:[['G5',2],['F#5',1],['E5',1]]},
+      {bass:45, ch:[57,61,64], mel:[['E5',1.5],['D5',.5],['C#5',1],['E5',1]]},
+      {bass:38, ch:[62,66,69], mel:[['D5',3],[null,1]]},
+      {bass:47, ch:[59,62,66], mel:[['F#5',1],['D5',1],['B4',1],['D5',1]]},
+      {bass:43, ch:[59,62,67], mel:[['E5',1],['G5',1],['B5',1.5],['A5',.5]]},
+      {bass:45, ch:[57,61,64], mel:[['A5',1],['G5',1],['F#5',1],['E5',1]]},
+      {bass:38, ch:[62,66,69], mel:[['D5',3],[null,1]]}
     ]}
   };
   function scheduleBar(name, n, t, dest){
@@ -244,7 +280,33 @@ const Sound = (()=>{
       if (n % 4 === 2) tremolo([mf(69), mf(70)], t, e*16, .05, dest);
       return e*8;
     }
+    if (name === 'alarm'){             // 132bpm, 16분음표 = 약 0.114초
+      const e = 60/132/4, roots = [40,40,36,38], r = roots[n % 4];
+      const riff = [0,0,12,0,7,0,10,0,0,0,12,0,7,0,5,7];
+      riff.forEach((d,i)=>pluck(mf(r + 12 + d), t+i*e, e*1.4, i%4 ? .09 : .14, dest));
+      [0,8].forEach(i=>thump(t+i*e, .6, dest));                       // 쿵
+      [4,12].forEach(i=>burst({t:t+i*e, type:'highpass', f:1800, a:.002, r:.09, peak:.07}));   // 탁
+      for (let i=2;i<16;i+=4) burst({t:t+i*e, type:'highpass', f:7000, a:.001, r:.03, peak:.025}); // 칙
+      pluck(mf(r), t, e*16, .12, dest);
+      if (n % 2 === 0) tremolo([mf(r + 24), mf(r + 31)], t, e*32, .035, dest);
+      return e*16;
+    }
     const S = SONGS[name], b = S.bars[n % S.bars.length], q = S.beat;
+    if (S.meter === 3){                // 왈츠: 쿵-짝-짝
+      piano(mf(b.bass), t, .36, q*2.6, dest);
+      [1,2].forEach(k=>b.ch.forEach(m=>piano(mf(m), t+k*q, .12, q*1.2, dest)));
+      pad(b.ch.map(mf), t, q*3.2, .025, dest);
+      let x = 0; b.mel.forEach(([nm, len])=>{ if (nm) piano(NOTE(nm), t+x*q, .55, q*len*1.5+.5, dest); x += len; });
+      if (b.box) tone(NOTE(b.box), {t:t+q*2.5, a:.003, r:1.4, peak:.035});
+      return q*3;
+    }
+    if (S.march){                      // 행진곡: 쿵(베이스)-짝(화음)
+      [0,2].forEach((k,i)=>piano(mf(b.bass + (i ? 7 : 0)), t+k*q, .38, q*1.4, dest));
+      [1,3].forEach(k=>b.ch.forEach(m=>piano(mf(m), t+k*q, .14, q*.7, dest)));
+      [0,2].forEach(k=>thump(t+k*q, .22, dest));
+      let x = 0; b.mel.forEach(([nm, len])=>{ if (nm) piano(NOTE(nm), t+x*q, .6, q*len*1.3+.3, dest); x += len; });
+      return q*4;
+    }
     b.lh.forEach((m,i)=>piano(mf(m), t+i*q/2, .32 - (i%4 ? .08 : 0), q*2.2, dest));
     pad(b.ch.map(mf), t, q*4.2, .035, dest);
     let x = 0; b.mel.forEach(([nm, len])=>{ if (nm) piano(NOTE(nm), t+x*q, .62, q*len*1.6+.6, dest); x += len; });

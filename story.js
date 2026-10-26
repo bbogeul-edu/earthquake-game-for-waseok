@@ -5,7 +5,7 @@
    ================================================================= */
 const STORY = {
   id: 'earthquake',                     // 랭킹에서 게임을 구분하는 이름 (영어, 띄어쓰기 없이)
-  version: 'v1.1.0',
+  version: 'v1.2.0',
   title: '지진에서 살아남기',
   titleHTML: '지진에서 <span>살아남기</span>',
   kicker: '와석초등학교 지진 대피 훈련',
@@ -128,7 +128,7 @@ STORY.mini = {
    오답 → res(결과 장면) → fb(왜 위험한지) → after(친구들 대화: 남 탓, 앞으로는 이렇게 하자) */
 STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
     /* ---------- 1장 ---------- */
-    SAVE(1,'나른한 5교시'), BG('class_seat'), AMB('room'), MUS('none'),
+    SAVE(1,'나른한 5교시'), BG('class_seat'), AMB('room'), MUS('lazy'),
     N('점심을 먹고 난 5교시 국어 시간. 창문으로 햇살이 쏟아져 들어와 교실이 따뜻했어요.'),
     S('teacher','자, 47쪽 펴세요. 오늘은 흉내 내는 말을 찾아볼 거예요.'),
     S('jho','하아암… 눈이 자꾸 감겨…','하품하며'),
@@ -141,7 +141,7 @@ STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
       {text:'따뜻한 창가 쪽을 보며 송화와 구름을 센다', set:{seat:'window'}, res:[BG('class_window'), S('sw','저건 토끼, 저건 고래! 하나, 둘, 셋…')]}
     ]}),
     N('사각사각 연필 소리만 들리는 평화로운 오후였어요.'),
-    AMB('none'), N('사르륵, 눈꺼풀이 무거워지던 그때…'),
+    AMB('none'), MUS('none'), N('사르륵, 눈꺼풀이 무거워지던 그때…'),
 
     /* ---------- 2장 ---------- */
     SAVE(2,'교실이 흔들려요'), AMB('none'), MUS('none'),
@@ -210,7 +210,7 @@ STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
     S('jhy','내가 맨 뒤에 설게. 재호야, 내 앞에 서.'),
 
     /* ---------- 3장: 3D 대피 미니게임 ---------- */
-    SAVE(3,'학교를 빠져나가요'), MUS('tension'),
+    SAVE(3,'학교를 빠져나가요'), MUS('alarm'),
     N(s=>`{학년}학년 {반}반 교실에서 운동장까지, 우리 반 대피길은 ${STAIR(s)}이에요.`),
     N('이제 우리가 직접 길을 찾아야 해요!'),
     MINI('evac'),
@@ -322,7 +322,7 @@ STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
        fb:'주차장은 차가 움직여 위험하고 피할 곳이 좁아요. 넓은 운동장으로 가요.',
        after:[S('sh','차 옆이 더 튼튼해 보이잖아.'), S('jho:scared','차가 움직이니까 더 무서웠어… 운동장으로 가자.')]}
     ]}),
-    BG('field'),
+    BG('field'), MUS('relief'),
     N('운동장에는 전교생이 반별로 모여 머리를 감싸고 앉아 있었어요.'),
     N('보건 선생님이 구급상자를 들고 달려오셨어요.'),
     S('nurse','피가 많이 줄었네. 누가 이렇게 잘 눌러 줬니? 발목은 움직이지 말고 그대로 두자. 119에 연락했어요.'),
@@ -330,9 +330,9 @@ STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
     N('재호는 재현이 손을 꼭 잡고 옆에 앉았어요.'),
 
     /* ---------- 6장 ---------- */
-    SAVE(6,'큰 여진'), BG('field'), AMB('yard'), MUS('tension'),
+    SAVE(6,'큰 여진'), BG('field'), AMB('yard'), MUS('relief'),
     N('잠시 숨을 고르던 그때…'),
-    FX('shake'), N('쿠르르르릉!! 아까보다 훨씬 큰 흔들림이 운동장을 덮쳤어요!'),
+    FX('shake'), MUS('alarm'), N('쿠르르르릉!! 아까보다 훨씬 큰 흔들림이 운동장을 덮쳤어요!'),
     N('여기저기서 비명이 터지고, 몇몇 아이들이 벌떡 일어나 뛰기 시작했어요.'),
     S('sw:shock','{이름}아!!'),
     C({id:'6-1', q:'빨리! 10초 안에 골라요!', timer:10, noHint:true, card:'q5', opts:[
@@ -342,7 +342,7 @@ STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
       {text:'친구 손을 잡고 일어선 채로 꼭 붙어서 버틴다', res:[SFX('thud'), N('둘이 함께 휘청이다 넘어졌어요.')],
        fb:'서 있으면 넘어지기 쉬워요. 그 자리에 낮게 앉아 머리를 보호해요.'}
     ], timeout:{res:[SFX('thud'), N('망설이는 사이 휘청이다 넘어졌어요.')], fb:'크게 흔들릴 땐 망설이지 말고 바로 낮게 앉아 머리를 보호해요.'}}),
-    FX('stop'), SFX('crash'),
+    FX('stop'), SFX('crash'), MUS('tension'),
     N('흔들림이 멈추고, 학교 쪽에서 쿠르릉 하는 소리가 들렸어요.'),
     N(s=>`${PLACE(s).stair.exit} 위 지붕 한쪽이 내려앉아 있었어요. 조금 전까지 우리가 지나온 곳이었어요.`),
     S('jho:scared','저기… 우리 방금 저기로 나왔잖아…'),
@@ -369,7 +369,7 @@ STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
        fb:'흔들리는 물건은 갑자기 넘어질 수 있어요. 확인하러 다가가지 말고 멀리 떨어져요.',
        after:[S('sh','거봐, 내 말 그냥 들었으면 됐잖아.'), S('jho:scared','나도 만져 볼 뻔했어… 멀리서만 보자.')]}
     ]}),
-    BG('ambulance'), SFX('siren'), MUS('none'),
+    BG('ambulance'), SFX('siren'), MUS('brave'),
     N('삐뽀삐뽀! 구급차가 운동장 안으로 들어왔어요.'),
     S('rescuer','다친 학생 어디 있어요? 어떻게 다쳤는지 아는 사람?'),
     N('모두 {이름}을 바라봐요.'),
@@ -389,7 +389,7 @@ STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
     MUS('hope'), SFX('siren'), N('구급차 문이 닫히고, 사이렌 소리가 점점 멀어졌어요.'),
 
     /* ---------- 8장 ---------- */
-    SAVE(8,'다시 만나'), BG('field_dusk'), AMB('yard'), MUS('none'),
+    SAVE(8,'다시 만나'), BG('field_dusk'), AMB('yard'), MUS('relief'),
     SFX('ding'), S('radio','학생 여러분은 운동장에서 담임 선생님과 함께 기다려 주세요. 보호자께 연락드리고 있습니다.'),
     S('sh','우리 집 저기 보이는 아파트야. 5분이면 가. 기다리기 지겨운데 그냥 걸어가자.'),
     S('jho','엄마 보고 싶어… 교문 앞에 엄마 차 와 있을지도 몰라…'),
@@ -408,7 +408,7 @@ STORY.script = ({N, S, BG, FX, SAVE, C, CARD, IF, SFX, AMB, MUS, MINI}) => [
        after:[S('sh','거봐, 그냥 걸어갔으면 됐잖아.'), S('jho','엄마는 여기로 오실 거야… 같이 기다리자.')]}
     ]}),
     N('하나둘 부모님들이 도착했어요. 엄마 아빠 품에 안긴 친구들이 엉엉 울기 시작했어요.'),
-    BG('class_after'), AMB('room'), MUS('none'),
+    BG('class_after'), AMB('room'), MUS('lazy'),
     N('2주 뒤, 다시 5교시 국어 시간. 창문으로 햇살이 쏟아져 들어왔어요.'),
     S('jho','하아암…','하품하며'),
     S('sw','재호야, 졸지 마! 오늘은 집중하기로 했잖아.'),
